@@ -1,57 +1,84 @@
 #!/usr/bin/env python3
 
-import sys
+import argparse
 import scipy.io.wavfile as wav
 import numpy as np
 from rls import RLS
 
-def parse_arguments():
-  usage = "./audio_rls <input.wav> <output.wav> <error.wav>" 
-  if len(sys.argv) != 4:
-    print("Invalid number of arguments")
-    print(usage)
-    sys.exit(1)
+def parse_positive_int(value):
+    ivalue = int(value)
+    if ivalue <= 0:
+         raise argparse.ArgumentTypeError("{} is an invalid value for positive int".format(value))
+    return ivalue
 
-  input_file = sys.argv[1]
-  output_file = sys.argv[2]
-  error_file = sys.argv[3]
-  return input_file, output_file, error_file
-    
+def get_args():
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-input_file, output_file, error_file = parse_arguments()
+    # required positional argument
+    parser.add_argument('input_file', type=str,
+                        default=None, help="model")
 
-# parameters
-dim_input = 1000
-prediction_distance = 1 # 0 is invalid, since it is known
-rls_gamma = 0.001 #0.001
-rls_lambda = 1.5 #1.0
+    # optional arguments
+    parser.add_argument('--dim_input', type=int,
+                        default=1000, help="The input window size")
+    parser.add_argument('--print_every', type=parse_positive_int,
+                        default=1000, help="Report average squared error every nth sample")
+    parser.add_argument('--prediction_distance', type=parse_positive_int,
+                        default=1, help="How far into future to predict") # >=1
+    parser.add_argument('--prediction_output', type=str,
+                        default=None, help="Write predicted data to wav file")
+    parser.add_argument('--error_output', type=str,
+                        default=None, help="Write prediction error to wav file")
+    parser.add_argument('--rls_gamma', type=float,
+                        default=0.001, help="RLS gamma parameter")
+    parser.add_argument('--rls_lambda', type=float,
+                        default=1.0, help="RLS lambda parameter")
+    parser.add_argument('--verbose', action="store_true",
+                        help="Verbose printing")
+    return parser.parse_args()
 
-rls = RLS(dim_input, rls_gamma)
-sample_rate, input_data = wav.read(input_file)
-tot_size = input_data.size - dim_input - prediction_distance + 1
+def main(args):
+  if args.verbose:
+    print("args: {}".format(vars(args)))
 
-output_data = np.array([], dtype=float)
-error_data = np.array([], dtype=float)
-error_sqr_sum = 0.0
+  rls = RLS(args.dim_input, args.rls_gamma)
+  sample_rate, input_data = wav.read(args.input_file)
 
-epoch_size = 1000
+  if args.verbose:
+    print("sample rate: {} Hz".format(sample_rate))
+    print("num samples: {}".format(input_data.size))
 
-for t in range(tot_size):
+  tot_size = input_data.size - args.dim_input - args.prediction_distance + 1
 
-  if t%epoch_size==0:
-    print(str(round(100.0*t/tot_size,2)) + "%\t" +
-      str(round(error_sqr_sum/epoch_size,5)))
-    error_sum = 0.0
-  
-  input = input_data[t:t+dim_input]/32767.0
-  target = input_data[t+dim_input+prediction_distance-1]/32767.0
-  
-  output, error = rls.observe(input, target,rls_lambda)
+  output_data = np.array([], dtype=float)
+  error_data = np.array([], dtype=float)
+  error_sqr_sum = 0.0
 
-  output_data = np.append(output_data, output)
-  error_data = np.append(error_data, error)
+  for t in range(tot_size):
 
-  error_sqr_sum += error*error
+    if t%args.print_every==0:
+      print("{}%\t{}".format(round(100.0*t/tot_size,2), round(error_sqr_sum/args.print_every,5)))
+      error_sqr_sum = 0.0
 
-wav.write(output_file, sample_rate, np.int16(output_data*32767.0))
-wav.write(error_file, sample_rate, np.int16(error_data*32767.0))
+    input = input_data[t:t+args.dim_input]/32767.0
+    target = input_data[t+args.dim_input+args.prediction_distance-1]/32767.0
+    output, error = rls.observe(input, target, args.rls_lambda)
+    error_sqr_sum += error*error
+
+    output_data = np.append(output_data, output)
+    error_data = np.append(error_data, error)
+
+  # write prediction output wav file
+  if args.prediction_output is not None:
+    wav.write(args.prediction_output, sample_rate, np.int16(output_data*32767.0))
+    if args.verbose:
+      print("Wrote {}".format(args.prediction_output))
+
+  # write prediction error wav file
+  if args.error_output is not None:
+    wav.write(args.error_output, sample_rate, np.int16(error_data*32767.0))
+    if args.verbose:
+      print("Wrote {}".format(args.error_output))
+
+if __name__ == "__main__":
+  main(get_args())
