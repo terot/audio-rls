@@ -11,6 +11,18 @@ def parse_positive_int(value):
          raise argparse.ArgumentTypeError("{} is an invalid value for positive int".format(value))
     return ivalue
 
+def parse_restricted_float(value):
+    fvalue = float(value)
+    if fvalue < 0 or fvalue > 1:
+         raise argparse.ArgumentTypeError("{} is not in range [0,1]".format(value))
+    return fvalue
+
+def parse_positive_float(value):
+    fvalue = float(value)
+    if fvalue <= 0:
+        raise argparse.ArgumentTypeError("{} is an invalid value for positive float".format(value))
+    return fvalue
+
 def get_args():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
@@ -29,10 +41,10 @@ def get_args():
                         default=None, help="Write predicted data to wav file")
     parser.add_argument('--error_output', type=str,
                         default=None, help="Write prediction error to wav file")
-    parser.add_argument('--rls_gamma', type=float,
-                        default=0.001, help="RLS gamma parameter")
-    parser.add_argument('--rls_lambda', type=float,
-                        default=1.0, help="RLS lambda parameter")
+    parser.add_argument('--rls_lambda', type=parse_restricted_float,
+                        default=1.0, help="RLS lambda parameter, aka. forgetting factor")
+    parser.add_argument('--rls_delta', type=parse_positive_float,
+                        default=0.001, help="RLS delta parameter for approximate initialization")
     parser.add_argument('--verbose', action="store_true",
                         help="Verbose printing")
     return parser.parse_args()
@@ -41,7 +53,7 @@ def main(args):
   if args.verbose:
     print("args: {}".format(vars(args)))
 
-  rls = RLS(args.dim_input, args.rls_gamma)
+  rls = RLS(args.dim_input, args.rls_delta)
   sample_rate, input_data = wav.read(args.input_file)
 
   if args.verbose:
