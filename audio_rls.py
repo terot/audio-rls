@@ -97,13 +97,13 @@ def main(args):
 
   # write prediction output wav file
   if args.prediction_output is not None:
-    wav.write(args.prediction_output, sample_rate, np.int16(output_data*32767.0))
+    wav.write(args.prediction_output, sample_rate, np.int16(outputs*32767.0))
     if args.verbose:
       print("Wrote {}".format(args.prediction_output))
 
   # write prediction error wav file
   if args.error_output is not None:
-    wav.write(args.error_output, sample_rate, np.int16(error_data*32767.0))
+    wav.write(args.error_output, sample_rate, np.int16(errors*32767.0))
     if args.verbose:
       print("Wrote {}".format(args.error_output))
 
